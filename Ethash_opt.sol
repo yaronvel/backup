@@ -181,24 +181,6 @@ contract SHA3_512 {
             }
         }
  
-        Result(result[0]);
-        Result(result[1]);
-        Result(result[2]);
-        Result(result[3]);
-        Result(result[4]);
-        Result(result[5]);
-        Result(result[6]);
-        Result(result[7]);
-        Result(result[8]);
-        Result(result[9]);
-        Result(result[10]);
-        Result(result[11]);
-        Result(result[12]);
-        Result(result[13]);
-        Result(result[14]);
-        Result(result[15]);                
-                                                
-                
         
         return result;
    }
@@ -207,7 +189,7 @@ contract SHA3_512 {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-contract Ethash {
+contract Ethash_opt {
     
     function halfsha3( bytes32 input ) constant returns(uint[2]) {
         uint result = uint(sha3(input));
@@ -222,7 +204,7 @@ contract Ethash {
     }
     
     SHA3_512 sha3_512;
-    function Ethash() {
+    function Ethash_opt() {
         sha3_512 = new SHA3_512();
     }
     uint merkleRoot = 0x003c39872c72a19c32d103bf9415d824;
@@ -360,30 +342,43 @@ contract Ethash {
         uint root = merkleRoot;
         
         for( i = 0 ; i < 64 ; i++ ) {
-            uint p = fnv( i ^ s[0], mix[i % 32]) % fullSizeIn128Resultion;
-            
-            if( computeCacheRoot( p, i, dataSetLookup,  witnessForLookup, branchSize )  != root ) {
+            uint fnvResult = (((i ^ s[0])*0x01000193) ^ mix[i % 32]) & 0xFFFFFFFF;
+        
+            //uint p = fnv( i ^ s[0], mix[0 % 32]) % fullSizeIn128Resultion;
+            /*   
+            if( computeCacheRoot( fnvResult % fullSizeIn128Resultion, i, dataSetLookup,  witnessForLookup, branchSize )  != root ) {
                 // PoW failed
                 return 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
-            }          
+            } */          
 
             for( j = 0 ; j < 8 ; j++ ) {
-                mix[j] = fnv(mix[j], dataSetLookup[4*i] & 0xFFFFFFFF );
-                mix[j+8] = fnv(mix[j+8], dataSetLookup[4*i + 1] & 0xFFFFFFFF );
-                mix[j+16] = fnv(mix[j+16], dataSetLookup[4*i + 2] & 0xFFFFFFFF );                
-                mix[j+24] = fnv(mix[j+24], dataSetLookup[4*i + 3] & 0xFFFFFFFF );
+                fnvResult = ((mix[0]*0x01000193) ^ (dataSetLookup[4*0] & 0xFFFFFFFF)) & 0xFFFFFFFF;
+                mix[0] = fnvResult; 
+                //mix[j] = fnv(mix[j], (dataSetLookup[4*0] & 0xFFFFFFFF) );
                 
-                dataSetLookup[4*i    ] = dataSetLookup[4*i    ]/(2**32);
-                dataSetLookup[4*i + 1] = dataSetLookup[4*i + 1]/(2**32);
-                dataSetLookup[4*i + 2] = dataSetLookup[4*i + 2]/(2**32);
-                dataSetLookup[4*i + 3] = dataSetLookup[4*i + 3]/(2**32);                
+                fnvResult = ((mix[0+8]*0x01000193) ^ (dataSetLookup[4*0+1] & 0xFFFFFFFF)) & 0xFFFFFFFF;
+                mix[0+8] = fnvResult;                 
+                //mix[j+8] = fnv(mix[j+8], (dataSetLookup[4*i + 1] & 0xFFFFFFFF) );
+                
+                fnvResult = ((mix[0+16]*0x01000193) ^ (dataSetLookup[4*0+2] & 0xFFFFFFFF)) & 0xFFFFFFFF;
+                mix[0+16] = fnvResult;                 
+                //mix[j+16] = fnv(mix[j+16], (dataSetLookup[4*i + 2] & 0xFFFFFFFF) );
+                
+                fnvResult = ((mix[0+24]*0x01000193) ^ (dataSetLookup[4*0+3] & 0xFFFFFFFF)) & 0xFFFFFFFF;
+                mix[0+24] = fnvResult;                                                 
+                //mix[j+24] = fnv(mix[j+24], (dataSetLookup[4*i + 3] & 0xFFFFFFFF) );
+                
+                dataSetLookup[4*0    ] = dataSetLookup[4*0    ]/(2**32);
+                dataSetLookup[4*0 + 1] = dataSetLookup[4*0 + 1]/(2**32);
+                dataSetLookup[4*0 + 2] = dataSetLookup[4*0 + 2]/(2**32);
+                dataSetLookup[4*0 + 3] = dataSetLookup[4*0 + 3]/(2**32);                
             }
         }
         
-        
+        /*
         for( i = 0 ; i < 32 ; i += 4) {
             cmix[i/4] = (fnv(fnv(fnv(mix[i], mix[i+1]), mix[i+2]), mix[i+3]));
-        }
+        }*/
         
 
         uint result = computeSha3(s,cmix); 

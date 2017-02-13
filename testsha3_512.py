@@ -411,7 +411,7 @@ def payment_request():
 
 ################################################################################
 
-use_ether_scan = True
+use_ether_scan = False
 if( use_augor or use_ether_scan ):
     key = utils.sha3("Smart Pool2")
 else:
@@ -430,7 +430,7 @@ global_wait_for_confirm = True
 
 
 
-(contract_data_ethash, abi_ethash) = get_contract_data("./Ethash", [])  # ,24,5,2016] )
+(contract_data_ethash, abi_ethash) = get_contract_data("./Ethash_opt", [])  # ,24,5,2016] )
 
 contract_hash_ethash = None
 #use_augor = False
@@ -442,7 +442,7 @@ contract_hash_ethash = None
 #109 754 100
 
 
-contract_hash_ethash = "4cdaf6e0eb718217859dad1e3c0482bc16201abc"
+contract_hash_ethash = "0e696947a06550def604e82c26fd9e493e576337"
 
 
 

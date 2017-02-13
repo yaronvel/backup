@@ -539,3 +539,134 @@ contract RLPReaderTest {
     }
     
 }
+
+
+contract Agt {
+    using RLP for RLP.RLPItem;
+    using RLP for RLP.Iterator;
+    using RLP for bytes;
+ 
+    struct BlockHeader {
+        uint    prevBlockHash; // 0
+        uint    coinbase;      // 1
+        uint    blockNumber;   // 8
+        uint    timestamp;     // 11
+        uint    extraData;     // 12
+    }
+ 
+    function Agt() {}
+     
+    function parseBlockHeader( bytes rlpHeader ) constant internal returns(BlockHeader) {
+        BlockHeader memory header;
+        
+        var it = rlpHeader.toRLPItem().iterator();        
+        uint idx;
+        while(it.hasNext()) {
+            if( idx == 0 ) header.prevBlockHash = it.next().toUint();
+            else if ( idx == 2 ) header.coinbase = it.next().toUint();
+            else if ( idx == 8 ) header.blockNumber = it.next().toUint();
+            else if ( idx == 11 ) header.timestamp = it.next().toUint();
+            else if ( idx == 12 ) header.extraData = it.next().toUint();
+            else it.next();
+            
+            idx++;
+        }
+ 
+        return header;        
+    }
+    
+    uint rootHash = 0x3aa28519b573673664db9bb9e3088573;
+    uint rootMin = 0x5832b6257d7d61877ceccac5;
+    uint rootMax = 0x5832b629a23dc089f2b1f52b;
+
+    uint numPendingShares = 5;
+    
+    function hash4( uint x1, uint x2, uint x3, uint x4 ) constant returns(uint){
+        return uint(sha3(x1,x2,x3,x4)) & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
+    }
+    
+    function verifyAgt( uint   leaf32BytesHash,
+                        uint   leafCounter,
+                        uint   branchIndex,
+                        uint[] countersBranch,
+                        uint[] hashesBranch ) constant returns(uint) {
+                        
+        uint currentHash = leaf32BytesHash & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
+        
+        uint leftCounterMin;
+        uint leftCounterMax;        
+        uint leftHash;
+        
+        uint rightCounterMin;
+        uint rightCounterMax;        
+        uint rightHash;
+        
+        uint min = leafCounter;
+        uint max = leafCounter;
+        
+        for( uint i = 0 ; i < countersBranch.length ; i++ ) {
+            if( branchIndex & 0x1 > 0 ) {
+                leftCounterMin = countersBranch[i] & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
+                leftCounterMax = countersBranch[i] >> 128;                
+                leftHash    = hashesBranch[i];
+                
+                rightCounterMin = min;
+                rightCounterMax = max;
+                rightHash    = currentHash;                
+            }
+            else {                
+                leftCounterMin = min;
+                leftCounterMax = max;
+                leftHash    = currentHash;
+                
+                rightCounterMin = countersBranch[i] & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
+                rightCounterMax = countersBranch[i] >> 128;                
+                rightHash    = hashesBranch[i];                                            
+            }
+            
+            currentHash = uint(sha3(leftCounterMin + (leftCounterMax << 128),
+                                    leftHash,
+                                    rightCounterMin + (rightCounterMax << 128),
+                                    rightHash)) & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
+                           
+            /*         
+            if( (leftCounterMin >= leftCounterMax) || (rightCounterMin >= rightCounterMax) ) {
+                if( i > 0 ) return false;
+                if( leftCounterMin < leftCounterMax ) return false;
+                if( rightCounterMin < rightCounterMax ) return false;                
+            }
+            
+            if( leftCounterMax >= rightCounterMin ) return false;*/
+
+            min = leftCounterMin;
+            max = rightCounterMax;
+            
+            branchIndex = branchIndex / 2;
+        }
+        return currentHash;
+                /*
+        if( min != rootMin ) return false;
+        if( max != rootMax ) return false;
+        
+        if( currentHash != rootHash ) return false;
+        
+        return true;*/
+    } 
+    
+    function parseBlockHeader_debug( bytes rlpHeader ) constant returns(uint[5]){
+        BlockHeader memory header = parseBlockHeader(rlpHeader);
+
+        return [header.prevBlockHash,
+                header.coinbase,
+                header.blockNumber,
+                header.timestamp,        
+                header.extraData];                        
+    }
+    
+    
+    
+    
+    
+     
+ 
+}
