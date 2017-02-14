@@ -248,12 +248,16 @@ contract Ethash {
 
         uint left;
         uint right;
+        uint node;
+        bool oddBranchSize = (branchSize % 2) > 0;
+         
         
         branchSize /= 2;
         uint witnessIndex = indexInElementsArray * branchSize;
+        if( oddBranchSize ) witnessIndex += indexInElementsArray;  
 
         for( uint depth = 0 ; depth < branchSize ; depth++ ) {
-            uint node  = witness[witnessIndex + depth] & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
+            node  = witness[witnessIndex + depth] & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
             if( index & 0x1 == 0 ) {
                 left = leaf;
                 right = node;
@@ -278,6 +282,20 @@ contract Ethash {
             
             leaf = uint(sha3(left,right)) & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
             index = index / 2;            
+        }
+        
+        if( oddBranchSize ) {
+            node  = witness[witnessIndex + depth] & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
+            if( index & 0x1 == 0 ) {
+                left = leaf;
+                right = node;
+            }
+            else {
+                left = node;
+                right = leaf;
+            }
+            
+            leaf = uint(sha3(left,right)) & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;        
         }
         
         
@@ -324,6 +342,7 @@ contract Ethash {
     function computeS( uint header, uint nonceLe ) constant returns(uint[16]) {
         uint[9]  memory M;
         
+        header = reverseBytes(header);
         
         M[0] = uint(header) & 0xFFFFFFFFFFFFFFFF;
         header = header / 2**64;
@@ -333,17 +352,31 @@ contract Ethash {
         header = header / 2**64;
         M[3] = uint(header) & 0xFFFFFFFFFFFFFFFF;
 
+        // make little endian nonce
         M[4] = nonceLe;
-        
         return sha3_512.sponge(M);
     }
+    
+    function reverseBytes( uint input ) constant internal returns(uint) {
+        uint result = 0;
+        for(uint i = 0 ; i < 32 ; i++ ) {
+            result = result * 256;
+            result += input & 0xff;
+            
+            input /= 256;
+        }
+        
+        return result;
+    }
+    
     event Log( uint result );
     function hashimoto( bytes32 header,
                         bytes8 nonceLe,
                         uint fullSizeIn128Resultion,
                         uint[] dataSetLookup,
                         uint[] witnessForLookup,
-                        uint   branchSize ) constant returns(uint) {
+                        uint   branchSize,
+                        uint   root ) constant returns(uint) {
          
         uint[16] memory s;
         uint[32] memory mix;
@@ -356,16 +389,13 @@ contract Ethash {
             mix[i] = s[i];
             mix[i+16] = s[i];
         }
-                
-        uint root = merkleRoot;
         
         for( i = 0 ; i < 64 ; i++ ) {
             uint p = fnv( i ^ s[0], mix[i % 32]) % fullSizeIn128Resultion;
-            
             if( computeCacheRoot( p, i, dataSetLookup,  witnessForLookup, branchSize )  != root ) {
                 // PoW failed
                 return 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
-            }          
+            }        
 
             for( j = 0 ; j < 8 ; j++ ) {
                 mix[j] = fnv(mix[j], dataSetLookup[4*i] & 0xFFFFFFFF );

@@ -1,4 +1,5 @@
 pragma solidity ^0.4.9;
+import "./Ethash.sol";
 
 /**
 * @title RLPReader
@@ -575,23 +576,36 @@ contract Agt {
         return header;        
     }
     
-    uint rootHash = 0x3aa28519b573673664db9bb9e3088573;
-    uint rootMin = 0x5832b6257d7d61877ceccac5;
-    uint rootMax = 0x5832b629a23dc089f2b1f52b;
+//    uint rootHash = 0x3bab01c2e7ff9450b87812b221c80313;
+//    uint rootMin = 0x5832b6257d7d61877ceccac5;
+//    uint rootMax = 0x5832b629a23dc089f2b1f52b;
 
-    uint numPendingShares = 5;
     
     function hash4( uint x1, uint x2, uint x3, uint x4 ) constant returns(uint){
         return uint(sha3(x1,x2,x3,x4)) & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
     }
     
-    function verifyAgt( uint   leaf32BytesHash,
-                        uint   leafCounter,
+    event VerifyAgt( string msg, uint index );
+    
+    struct VerifyAgtData {
+        uint rootHash;
+        uint rootMin;
+        uint rootMax;
+        
+        uint leafHash;
+        uint leafCounter;        
+    }
+    
+    function verifyAgt( /*uint[3] root, // [0] = min, [1] = max, [2] = root hash
+                        uint[2] leafData, // [0] = hash, [1] = counter
+                        //uint   leaf32BytesHash,
+                        //uint   leafCounter,*/
+                        VerifyAgtData data,                        
                         uint   branchIndex,
                         uint[] countersBranch,
-                        uint[] hashesBranch ) constant returns(uint) {
+                        uint[] hashesBranch ) constant internal returns(bool) {
                         
-        uint currentHash = leaf32BytesHash & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
+        uint currentHash = data.leafHash & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
         
         uint leftCounterMin;
         uint leftCounterMax;        
@@ -601,8 +615,8 @@ contract Agt {
         uint rightCounterMax;        
         uint rightHash;
         
-        uint min = leafCounter;
-        uint max = leafCounter;
+        uint min = data.leafCounter;
+        uint max = data.leafCounter;
         
         for( uint i = 0 ; i < countersBranch.length ; i++ ) {
             if( branchIndex & 0x1 > 0 ) {
@@ -628,29 +642,45 @@ contract Agt {
                                     leftHash,
                                     rightCounterMin + (rightCounterMax << 128),
                                     rightHash)) & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
-                           
-            /*         
+            
             if( (leftCounterMin >= leftCounterMax) || (rightCounterMin >= rightCounterMax) ) {
-                if( i > 0 ) return false;
-                if( leftCounterMin < leftCounterMax ) return false;
-                if( rightCounterMin < rightCounterMax ) return false;                
+                if( i > 0 ) {
+                    VerifyAgt( "counters mismatch",i);
+                    return false;
+                }
+                if( leftCounterMin > leftCounterMax ) {
+                    VerifyAgt( "counters mismatch",i);                
+                    return false;
+                }
+                if( rightCounterMin > rightCounterMax ) {
+                    VerifyAgt( "counters mismatch",i);                
+                    return false;
+                }                
             }
             
-            if( leftCounterMax >= rightCounterMin ) return false;*/
+            if( leftCounterMax >= rightCounterMin ) return false;
 
             min = leftCounterMin;
             max = rightCounterMax;
             
             branchIndex = branchIndex / 2;
         }
-        return currentHash;
-                /*
-        if( min != rootMin ) return false;
-        if( max != rootMax ) return false;
+
+        if( min != data.rootMin ) {
+            VerifyAgt( "min does not match root min",min);                        
+            return false;
+        }
+        if( max != data.rootMax ) {
+            VerifyAgt( "max does not match root max",max);        
+            return false;
+        }
         
-        if( currentHash != rootHash ) return false;
+        if( currentHash != data.rootHash ) {
+            VerifyAgt( "hash does not match root hash",currentHash);        
+            return false;
+        }
         
-        return true;*/
+        return true;
     } 
     
     function parseBlockHeader_debug( bytes rlpHeader ) constant returns(uint[5]){
@@ -669,4 +699,135 @@ contract Agt {
     
      
  
+}
+
+
+contract TestPool is Ethash, Agt {
+    address minerAddress    = 0x00B3B47928458109848009ABCDEFFFEA3459012095;
+    address contractAddress = 0x00A1A2A3A4A34598ABCDEFFED45902390854389043;
+    
+    struct SubmissionData {
+        uint numShares;
+        uint difficulty;
+        uint min;
+        uint max;
+        uint augMerkle;
+    }
+
+    mapping(address=>SubmissionData) submissions;
+
+    
+    struct EthashCacheData {
+        uint128 merkleRoot;
+        uint64  fullSizeIn128Resultion;
+        uint64  branchDepth;
+    }
+    
+    mapping(uint=>EthashCacheData) epochData;    
+    
+    function TestPool() {}
+
+    function submitClaim( uint numShares, uint difficulty, uint min, uint max, uint augMerkle ) {
+        SubmissionData memory data;
+        data.numShares = numShares;
+        data.difficulty = difficulty;
+        data.min = min;
+        data.max = max;
+        data.augMerkle = augMerkle;
+        
+        submissions[minerAddress] = data;        
+    }
+    
+    function setEpochData( uint128 merkleRoot, uint64 fullSizeIn128Resultion, uint64 branchDepth, uint epoch ) {
+        EthashCacheData memory data;
+        data.merkleRoot = merkleRoot;
+        data.fullSizeIn128Resultion = fullSizeIn128Resultion;
+        data.branchDepth = branchDepth;
+        
+        epochData[epoch] = data;    
+    }
+    
+    event ErrorLog( string msg, uint i );
+    function verifyClaim( bytes rlpHeader,
+                          uint  nonce,
+                          uint  shareIndex,
+                          uint[] dataSetLookup,
+                          uint[] witnessForLookup,
+                          uint[] augCountersBranch,
+                          uint[] augHashesBranch ) constant returns(uint) {
+                          
+        BlockHeader memory header = parseBlockHeader(rlpHeader);
+        SubmissionData submissionData = submissions[ minerAddress ];
+        
+        //return uint(sha3(rlpHeader));
+        
+        /*
+        // check coinbase
+        if( header.coinbase != uint(contractAddress) ) {
+            ErrorLog( "coinbase address is not as expected",header.coinbase);
+            return 10; 
+        }
+        
+        // check miner's address
+        if( (header.extraData >> 64) != uint(minerAddress) ) {
+            ErrorLog( "miner address is not as expected",header.extraData >> 64);
+            return 20;         
+        }
+        
+        // check difficulty
+        if( submissionData.difficulty != (header.extraData & 0xFFFFFFFFFFFFFFFF) ) {
+            ErrorLog( "difficulty is not as expected",(header.extraData & 0xFFFFFFFFFFFFFFFF));
+            return 30;                 
+        }*/
+        
+        // check counter
+        uint counter = header.timestamp * (2 ** 64) + nonce; 
+        if( counter < submissionData.min ) {
+            ErrorLog( "counter is smaller than min",counter);
+            return 4;                         
+        }
+        if( counter > submissionData.max ) {
+            ErrorLog( "counter is smaller than max",counter);
+            return 5;                         
+        }
+        
+        // verify agt
+        uint leafHash = uint(sha3(rlpHeader));
+        VerifyAgtData memory agtData;
+        agtData.rootHash = submissionData.augMerkle;
+        agtData.rootMin = submissionData.min;
+        agtData.rootMax = submissionData.max;
+        agtData.leafHash = leafHash;
+        agtData.leafCounter = counter;
+                
+        
+        if( ! verifyAgt( agtData,
+                         shareIndex,
+                         augCountersBranch,
+                         augHashesBranch ) ) {
+            ErrorLog( "verifyAgt failed",0);
+            return 6;
+        }                         
+                          
+        
+        // get epoch data
+        EthashCacheData memory eData = epochData[header.blockNumber / 30000];
+        
+        // verify ethash
+        uint ethash = hashimoto( bytes32(leafHash),
+                                 bytes8(nonce),
+                                 eData.fullSizeIn128Resultion,
+                                 dataSetLookup,
+                                 witnessForLookup,                                 
+                                 eData.branchDepth,
+                                 eData.merkleRoot );
+        if( ethash > (2**256-1)/submissionData.difficulty ) {
+            ErrorLog( "ethash difficulty too low",ethash);
+            return 7;        
+        }
+                          
+        ErrorLog( "verification completed",0);
+        
+        return 8;
+    } 
 }

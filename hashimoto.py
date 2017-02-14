@@ -165,6 +165,8 @@ def hashimoto(header, nonce, full_size, dataset_lookup):
             
         mix = map(fnv, mix, newdata)
     # compress mix
+    #print str(ps)
+    #sd
     cmix = []
     for i in range(0, len(mix), 4):
         cmix.append(fnv(fnv(fnv(mix[i], mix[i+1]), mix[i+2]), mix[i+3]))
@@ -242,13 +244,15 @@ def compute_cache_merkle_tree( full_size, dataset_lookup, level, prev_level_node
 raw_rlp = "f902a0f9020da0cdcbe20df89a1a82b695088449025409da9f8051cc4078eddfbed5df8d303b4ea01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347944bb96091ee9d802ed039c4d1a5f6216f90f81b01a0fdc095b1def486fbfacd7059c5b6a1476662d6a93585773f879c8bd9a0122a07a0893bd1437053554da16fd268cbd197b37ea8974b87ebe3fc8025d3a64a869f93a06840c0608508973ef71f9f5cd9b1026817bac20fd30e62df424c475cd5195011b9010000000000000000000000000000000000000000000000000000000000000020000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000120000000000200000000000000000000000000000000000000000000000000000000000000000866b6e77e6b764832fcfff833dc951830100c88458986a4d8d657468706f6f6c202d20555331a0f9e6ef14b97cc29b289b306fd9e70382d7b8f9cca7f3ee791bb4f79637698e5c88278867b1e4ea6850f88df88b82cc688504a817c800830e57e094cd111aa492a9c77a367c36e6d6af8e6f212e0c8e80a4e1fa8e843f0e24ef6cfc2af7206e8f8f7beecaeef824f68ba237007e001e1233b1b14a381ba0a21789dc109bd6630c955930ab2630a2b9c4b7bb0a8934bedc17144f8567defba07b03e650fe72bada0f047645f03344f4449a449e2688c080f02248bc0c874acfc0"
 print str(len(raw_rlp)//2) 
 header = blocks.BlockHeader.from_block_rlp(h2b(raw_rlp))
-
+'''
 print str(header.to_dict())
+print str(header.to_dict()['number'])
+print str(header.to_dict()['nonce'])
 print str(header.check_pow())
 print b2h(header.mining_hash)
-
+sd
 #8fb9d5aa5aa693ad8d5af51314db64ceb400bab44d916b8780d4dac1e135ac61
-
+'''
 '''
 nonce = 0x278867b1e4ea6850
 hash = ecfae06ad0b42694c600e349144441fe17570b4225c5a4d3e376b775bf620dec
@@ -306,11 +310,16 @@ for block_number in range(100):
 #print "full size = " + str(full_size//128)
 #sd 
  
+
+#ratio = int("ff" * 32, 16) / int("0000012f9ed0cb20a500e2def8992807bb3e6639ed5de7b110c2557b5964871e",16)
+#print str(ratio)
+#sd
  
+  
  
-block_number = 3133439
+#block_number = 3133439
  
-block_number = 3133439#2400000
+block_number = 8893#2400000
 full_size = get_full_size(block_number)
 print "full size = " + str(full_size//128)
 
@@ -337,8 +346,23 @@ print "done"
 #header = h2b("100cbec5e5ef82991290d0d93d758f19082e71f234cf479192a8b94df6da6bfe")#[::-1]
 #nonce = h2b("307692cf71b12f6d")
 
+'''
+this once worked
 header = h2b("ecfae06ad0b42694c600e349144441fe17570b4225c5a4d3e376b775bf620dec")
 nonce = h2b("278867b1e4ea6850")[::-1]
+'''
+'''
+nonce = 0x278867b1e4ea6850
+hash = ecfae06ad0b42694c600e349144441fe17570b4225c5a4d3e376b775bf620dec
+block_number = 3133439
+'''
+
+header = h2b("710dff7e1be4a0a9b8d31865dc0e61bb3ef5bf416a87e54c8a4b249ebcb5c92f")
+nonce = h2b("a4c7fb2e4480ca3e")
+
+header = h2b("97ec8edce2c74aee924e15d6d4e9a156cd90ee3f8123cceb858ea1870041fc67")
+nonce = h2b("7844522f18e29653")
+
 
 '''
 result = calc_dataset_item(cache,13282552*2)
@@ -358,10 +382,12 @@ hash = hashimoto_light(full_size, cache, header, nonce)
 result = hash["result"]
 #print str(result)
 print b2h(result)
-sd
-#0x73c2bd54c3ee10eb8e4a7f663bdc01da272292802b7c1b4ec713271fd034ca4e
-print str(elements_input_for_contract)
 
+#0x73c2bd54c3ee10eb8e4a7f663bdc01da272292802b7c1b4ec713271fd034ca4e
+#for e in elements_input_for_contract:
+#    print "0x%x" % e
+#print str(elements_input_for_contract)
+sd
 sd
 
 sd
@@ -387,3 +413,4 @@ print "full size = " + str(full_size)
 
 
 #0x73c2bd54c3ee10eb8e4a7f663bdc01da272292802b7c1b4ec713271fd034ca4e
+
