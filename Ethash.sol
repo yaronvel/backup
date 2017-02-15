@@ -180,26 +180,7 @@ contract SHA3_512 {
                 }
             }
         }
- 
-        Result(result[0]);
-        Result(result[1]);
-        Result(result[2]);
-        Result(result[3]);
-        Result(result[4]);
-        Result(result[5]);
-        Result(result[6]);
-        Result(result[7]);
-        Result(result[8]);
-        Result(result[9]);
-        Result(result[10]);
-        Result(result[11]);
-        Result(result[12]);
-        Result(result[13]);
-        Result(result[14]);
-        Result(result[15]);                
-                                                
-                
-        
+         
         return result;
    }
 

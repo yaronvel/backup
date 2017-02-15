@@ -703,8 +703,14 @@ contract Agt {
 
 
 contract TestPool is Ethash, Agt {
-    address minerAddress    = 0x00B3B47928458109848009ABCDEFFFEA3459012095;
-    address contractAddress = 0x00A1A2A3A4A34598ABCDEFFED45902390854389043;
+    address public minerAddress    = 0x00B3B47928458109848009ABCDEFFFEA3459012095;
+    address public contractAddress = 0x00A1A2A3A4A34598ABCDEFFED45902390854389043;
+    
+    address public owner;
+    
+    string public version = "0.0.1";
+    
+    bool public newVersionReleased = false;
     
     struct SubmissionData {
         uint numShares;
@@ -712,9 +718,15 @@ contract TestPool is Ethash, Agt {
         uint min;
         uint max;
         uint augMerkle;
+        uint blockNumber;
+    }
+    
+    struct MinerData {
+        SubmissionData lastSubmission;    
+        uint lastCounter;
     }
 
-    mapping(address=>SubmissionData) submissions;
+    mapping(address=>MinerData) minersData;
 
     
     struct EthashCacheData {
@@ -725,17 +737,51 @@ contract TestPool is Ethash, Agt {
     
     mapping(uint=>EthashCacheData) epochData;    
     
-    function TestPool() {}
+    event Debug( string msg );
+    
+    function TestPool() { owner = msg.sender; }
+    
+    function declareNewerVersion() {
+        if( owner != msg.sender ) throw;
+        
+        newVersionReleased = true;
+    }
+    
+    function register( uint timestamp ) {
+        // TODO - replace timestamp with now
+        Debug("register");
+        minersData[minerAddress].lastCounter = timestamp * (2**64);
+    }
+
+    function getClaimSeed( ) constant returns(uint){
+        MinerData memory data = minersData[minerAddress];
+        if( block.number > data.lastSubmission.blockNumber + 200 ) return 0;
+        if( block.number <= data.lastSubmission.blockNumber + 1 ) return 0;        
+        return uint(block.blockhash(data.lastSubmission.blockNumber + 1));
+    }
 
     function submitClaim( uint numShares, uint difficulty, uint min, uint max, uint augMerkle ) {
-        SubmissionData memory data;
-        data.numShares = numShares;
-        data.difficulty = difficulty;
-        data.min = min;
-        data.max = max;
-        data.augMerkle = augMerkle;
+        MinerData memory data = minersData[minerAddress];
         
-        submissions[minerAddress] = data;        
+        if( data.lastCounter >= min ) {
+            data.lastCounter = max + 1;
+            Debug("submit claim - miner cheated");
+            return;        
+        }
+        
+        MinerData memory newData;
+        
+        newData.lastCounter = max + 1;
+        
+        newData.lastSubmission.numShares = numShares;
+        newData.lastSubmission.difficulty = difficulty;
+        newData.lastSubmission.min = min;
+        newData.lastSubmission.max = max;
+        newData.lastSubmission.augMerkle = augMerkle;
+        newData.lastSubmission.blockNumber = block.number;
+        
+        minersData[minerAddress] = newData;
+        Debug("submit claim ok");
     }
     
     function setEpochData( uint128 merkleRoot, uint64 fullSizeIn128Resultion, uint64 branchDepth, uint epoch ) {
@@ -744,20 +790,23 @@ contract TestPool is Ethash, Agt {
         data.fullSizeIn128Resultion = fullSizeIn128Resultion;
         data.branchDepth = branchDepth;
         
-        epochData[epoch] = data;    
+        epochData[epoch] = data;
+        
+        Debug("set epoch data");   
     }
     
     event ErrorLog( string msg, uint i );
+    event Pay( string msg, uint amount );
     function verifyClaim( bytes rlpHeader,
                           uint  nonce,
                           uint  shareIndex,
                           uint[] dataSetLookup,
                           uint[] witnessForLookup,
                           uint[] augCountersBranch,
-                          uint[] augHashesBranch ) constant returns(uint) {
+                          uint[] augHashesBranch ) returns(uint) {
                           
         BlockHeader memory header = parseBlockHeader(rlpHeader);
-        SubmissionData submissionData = submissions[ minerAddress ];
+        SubmissionData submissionData = minersData[ minerAddress ].lastSubmission;
         
         //return uint(sha3(rlpHeader));
         
@@ -826,8 +875,17 @@ contract TestPool is Ethash, Agt {
             return 7;        
         }
                           
-        ErrorLog( "verification completed",0);
+        Pay( "verification completed you will be paid", 3 ether * submissionData.difficulty * submissionData.numShares / block.difficulty);
         
         return 8;
-    } 
+    }
+    
+    function array( uint[] x ) returns(bytes32){
+        return sha3(x);
+    }
+    
+    function bytesstream( bytes x ) returns(bytes32) {
+        return sha3(x);
+    }
+    
 }

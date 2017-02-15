@@ -12,7 +12,7 @@ from bike.parsing.fastparserast import Node
 
 
 global_wait_for_confirm = True
-use_ether_scan = False
+use_ether_scan = True
 use_augor = False
 ether_scan_api_key = '66FCG5X3HSVW23R2ZJTFJEKWMKKGJVIQXK'
 local_url = "http://localhost:8545/jsonrpc"
@@ -104,7 +104,7 @@ def make_transaction(src_priv_key, dst_address, value, data):
     gas_price = int(gas_price, 16)
     start_gas = int(start_gas, 16) + 100000
     
-    start_gas = 7612288  # // 10
+    start_gas = 4612288  # // 10
     # start_gas = 5000000    
     
     tx = transactions.Transaction(nonce,
@@ -411,11 +411,12 @@ def payment_request():
 
 ################################################################################
 
-
+use_ether_scan = True
 if( use_augor or use_ether_scan ):
     key = utils.sha3("Smart Pool2")
 else:
     key = h2b("4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d")
+key = utils.sha3("Smart Pool2")
 address = b2h(utils.privtoaddr(key))
 
 
@@ -434,12 +435,12 @@ global_wait_for_confirm = True
 
 contract_hash_ethash = None
 use_augor = False
-use_ether_scan = False
+use_ether_scan = True
 #(str, contract_hash_ethash) = upload_contract( key, contract_data_ethash, 0 )
 #xsd
 
 
-contract_hash_ethash = "2f3efa6bbdc5faf4dc1a600765c7b7829e47be10"
+contract_hash_ethash = "0x1149eD647cae5B4C3f4A2dca4F68c83683e33e14"
 
 
 
@@ -465,12 +466,31 @@ rlp_header = [249, 1, 229, 160, 68, 102, 208, 219, 65, 245, 30, 224, 234, 244, 2
 verify_claim_params = [bytes(bytearray(rlp_header)), 0xb00a73511db2eef0, 0, cache_elements, cache_branch, aug_tree_counters_branch, aug_tree_hashes_branch]
 #print b2h(utils.sha3(verify_claim_params[0]))
 #sd
+
+print b2h(verify_claim_params[0])
+sd
+
+
+import sys
+
+def print_array( array ):
+    sys.stdout.write("a := [%u" % len(array) + "]string{")
+    sys.stdout.flush()
+    for e in array:
+       sys.stdout.write("\"%x\"," % e)
+       sys.stdout.flush()
+    sys.stdout.write("}")
+    sys.stdout.flush()
+    print ""
+#print_array(cache_elements)   
+#kl
+'''
 call_function(key, 0, contract_hash_ethash, abi_ethash, "setEpochData", epoch_params)
 call_function(key, 0, contract_hash_ethash, abi_ethash, "submitClaim", submit_claim_params)
 
 #verify_claim_params[0] = h2b(verify_claim_params[0])
-
-result = call_const_function(key, 0, contract_hash_ethash, abi_ethash, "verifyClaim", verify_claim_params)
+'''
+result = call_function(key, 0, contract_hash_ethash, abi_ethash, "verifyClaim", verify_claim_params)
 print str(result)
 sd
 
