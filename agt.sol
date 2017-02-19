@@ -548,11 +548,11 @@ contract Agt {
     using RLP for bytes;
  
     struct BlockHeader {
-        uint    prevBlockHash; // 0
-        uint    coinbase;      // 1
-        uint    blockNumber;   // 8
-        uint    timestamp;     // 11
-        uint    extraData;     // 12
+        uint       prevBlockHash; // 0
+        uint       coinbase;      // 1
+        uint       blockNumber;   // 8
+        uint       timestamp;     // 11
+        bytes32    extraData;     // 12
     }
  
     function Agt() {}
@@ -567,7 +567,7 @@ contract Agt {
             else if ( idx == 2 ) header.coinbase = it.next().toUint();
             else if ( idx == 8 ) header.blockNumber = it.next().toUint();
             else if ( idx == 11 ) header.timestamp = it.next().toUint();
-            else if ( idx == 12 ) header.extraData = it.next().toUint();
+            else if ( idx == 12 ) header.extraData = bytes32(it.next().toUint());
             else it.next();
             
             idx++;
@@ -690,15 +690,8 @@ contract Agt {
                 header.coinbase,
                 header.blockNumber,
                 header.timestamp,        
-                header.extraData];                        
+                uint(header.extraData)];                        
     }
-    
-    
-    
-    
-    
-     
- 
 }
 
 
@@ -722,11 +715,14 @@ contract TestPool is Ethash, Agt {
     }
     
     struct MinerData {
+        byte[5]       minerId;
+        address       paymentAddress;
         SubmissionData lastSubmission;    
         uint lastCounter;
     }
 
     mapping(address=>MinerData) minersData;
+    uint numMiners;
 
     
     struct EthashCacheData {
@@ -747,10 +743,36 @@ contract TestPool is Ethash, Agt {
         newVersionReleased = true;
     }
     
-    function register( uint timestamp ) {
+    function register( uint timestamp, address paymentAddress ) {
         // TODO - replace timestamp with now
         Debug("register");
         minersData[minerAddress].lastCounter = timestamp * (2**64);
+        minersData[minerAddress].paymentAddress = paymentAddress;
+        
+        // build id
+        uint id = numMiners++;
+        if( id >= (26+26+10)**5 ) throw; // too many miners
+        byte[5] memory byteId;
+        for( uint i = 0 ; i < 5 ; i++ ) {
+            uint b = id % (26+26+10);
+            if( b < 26 ) {
+                byteId[i] = byte(b + 0x61); //0x61 = 'a'
+            }
+            else if( b < 26 + 26 ) {
+                byteId[i] = byte(b + 0x41 - 26); // 0x41 = 'A'         
+            }
+            else {
+                byteId[i] = byte(b + 0x30 - 52); // 0x30 = '0'
+            }
+            
+            id /= (26+26+10);
+        }
+        
+        minersData[minerAddress].minerId = byteId;
+    }
+    
+    function getMinerId() constant returns(byte[5]) {
+        return minersData[minerAddress].minerId;
     }
 
     function getClaimSeed( ) constant returns(uint){
@@ -795,6 +817,51 @@ contract TestPool is Ethash, Agt {
         Debug("set epoch data");   
     }
     
+    function verifyExtraData( bytes32 extraData, byte[5] minerId, uint difficulty ) constant returns(bool) {
+        // compare id
+        if( extraData[10] != minerId[0] ) {
+            ErrorLog( "verifyExtraData: miner id not as expected", 0 );        
+            return false;
+        }
+        if( extraData[11] != minerId[1] ) {
+            ErrorLog( "verifyExtraData: miner id not as expected", 0 );                
+            return false;
+        }        
+        if( extraData[12] != minerId[2] ) {
+            ErrorLog( "verifyExtraData: miner id not as expected", 0 );                
+            return false;
+        }
+        if( extraData[13] != minerId[3] ) {
+            ErrorLog( "verifyExtraData: miner id not as expected", 0 );        
+            return false;
+        }        
+        if( extraData[14] != minerId[4] ) {
+            ErrorLog( "verifyExtraData: miner id not as expected", 0 );                
+            return false;
+        }
+        
+        // compare difficulty
+        uint encodedDiff = 0;
+        for( uint i = 0 ; i < 16 ; i++ ) {
+            uint char = uint(extraData[i+16]);
+            if( char >= 0x30 && char <= 0x39 ) char = char - 0x30; //0-9
+            else if( char >= 0x61 && char <= 0x66 ) char = char - 0x61 + 10;
+            else {
+                ErrorLog( "verifyExtraData: unexpected char in difficulty encoding", i );                    
+                return false; // wrong input
+            }
+            
+            encodedDiff = encodedDiff * 16 + char; 
+        }
+        
+        if( encodedDiff != difficulty ) {
+            ErrorLog( "verifyExtraData: difficulty is not as expected", encodedDiff );
+            return false;
+        }
+        
+        return true;            
+    }
+    
     event ErrorLog( string msg, uint i );
     event Pay( string msg, uint amount );
     function verifyClaim( bytes rlpHeader,
@@ -817,17 +884,15 @@ contract TestPool is Ethash, Agt {
             return 10; 
         }
         
-        // check miner's address
-        if( (header.extraData >> 64) != uint(minerAddress) ) {
-            ErrorLog( "miner address is not as expected",header.extraData >> 64);
-            return 20;         
-        }
+        */
         
-        // check difficulty
-        if( submissionData.difficulty != (header.extraData & 0xFFFFFFFFFFFFFFFF) ) {
-            ErrorLog( "difficulty is not as expected",(header.extraData & 0xFFFFFFFFFFFFFFFF));
-            return 30;                 
-        }*/
+        // check extra data
+        if( ! verifyExtraData( header.extraData,
+                               minersData[ minerAddress ].minerId,
+                               submissionData.difficulty ) ) {
+            ErrorLog( "extra data not as expected", uint(header.extraData) );
+            return 20;                               
+        }  
         
         // check counter
         uint counter = header.timestamp * (2 ** 64) + nonce; 
@@ -889,3 +954,6 @@ contract TestPool is Ethash, Agt {
     }
     
 }
+
+
+
