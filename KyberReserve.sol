@@ -307,6 +307,8 @@ contract KyberNetwork {
     uint  constant PRECISION = (10**18);
     uint  constant EPSILON = (1000);
     KyberReserve[] public reserves;
+    
+    mapping(address=>mapping(bytes32=>bool)) perReserveListedPairs;
 
     event ErrorReport( address indexed origin, uint error, uint errorInfo );
     
@@ -386,7 +388,7 @@ contract KyberNetwork {
     
     event Trade( address indexed sender, ERC20 source, ERC20 dest, uint actualSrcAmount, uint actualDestAmount );
     
-    struct ReserveInfo {
+    struct ReserveTokenInfo {
         uint rate;
         KyberReserve reserve;
         uint reserveBalance;
@@ -415,7 +417,7 @@ contract KyberNetwork {
         TradeInfo memory tradeInfo = TradeInfo(0,srcAmount,false);
         
         while( (tradeInfo.convertedDestAmount + EPSILON < maxDestAmount) && (tradeInfo.remainedSourceAmount > EPSILON) ) {
-            ReserveInfo memory reserveInfo;
+            ReserveTokenInfo memory reserveInfo;
             (reserveInfo.rate, reserveInfo.reserve, reserveInfo.reserveBalance) = findBestRate(source,dest);
             if( reserveInfo.rate == 0 || reserveInfo.rate < minConversionRate ) {
                 tradeInfo.tradeFailed = true;
@@ -461,9 +463,36 @@ contract KyberNetwork {
             if( tradeInfo.remainedSourceAmount > 0 && source == ETH_TOKEN_ADDRESS ) {
                 msg.sender.transfer(tradeInfo.remainedSourceAmount);
             }
+            ErrorReport( tx.origin, 0, 0 );
             Trade( msg.sender, source, dest, srcAmount-tradeInfo.remainedSourceAmount, tradeInfo.convertedDestAmount );
             return true;
         }
     }
+    
+    event AddReserve( KyberReserve reserve, bool add );
+    function addReserve( KyberReserve reserve, bool add ) {
+        if( msg.sender != admin ) {
+            // only admin can add to reserve
+            ErrorReport( msg.sender, 0x87000000, 0 );
+            return;
+        }
+        
+        if( add ) {
+            reserves.push(reserve);
+            AddReserve( reserve, true );
+        }
+        else {
+            // will have truble if more than 50k reserves...
+            for( uint i = 0 ; i < reserve.length ; i++ ) {
+                if( reserves[i] == reserve ) {
+                    if( reserves.length == 0 ) return;
+                    reserves[i] = reserves[--reserves.length];
+                    AddReserve( reserve, false );
+                    break;
+                }    
+            }
+        }
+        
+        ErrorReport( msg.sender, 0, 0 );
+    }
 }
-
