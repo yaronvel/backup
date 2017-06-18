@@ -299,4 +299,171 @@ contract KyberReserve {
 
 
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+contract KyberNetwork {
+    address admin;
+    ERC20 constant public ETH_TOKEN_ADDRESS = ERC20(0x00eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee);
+    uint  constant PRECISION = (10**18);
+    uint  constant EPSILON = (1000);
+    KyberReserve[] public reserves;
+
+    event ErrorReport( address indexed origin, uint error, uint errorInfo );
+    
+    function KyberNetwork( address _admin ) {
+        admin = _admin;
+    }
+    
+    function findBestRate( ERC20 source, ERC20 dest ) internal constant returns(uint,KyberReserve,uint) {
+        uint bestRate = 0;
+        uint bestReserveBalance = 0;
+        KyberReserve bestReserve = KyberReserve(0);
+        
+        for( uint i = 0 ; i < reserves.length ; i++ ) {
+            uint rate; uint expBlock; uint balance;
+            (rate,expBlock,balance) = reserves[i].getPairInfo(source,dest);
+            if( (expBlock >= block.number) && (balance > 0) && (rate > bestRate ) ) {
+                bestRate = rate;
+                bestReserveBalance = balance;
+                bestReserve = reserves[i];
+            }
+        }
+        
+        return (bestRate, bestReserve, bestReserveBalance);
+    }
+    
+    function doSingleTrade( ERC20 source, uint amount,
+                            ERC20 dest, address destAddress,
+                            KyberReserve reserve,
+                            bool validate ) internal returns(bool) {
+                                
+        uint callValue = 0;
+        if( source == ETH_TOKEN_ADDRESS ) callValue = amount;
+        else {
+            // take source tokens to this contract
+            source.transferFrom(msg.sender, this, amount);
+            
+            // let reserve use network tokens
+            source.approve( reserve, amount);
+        }
+        if( ! reserve.trade.value(callValue)(source, amount, dest, destAddress, validate ) ) {
+            if( source != ETH_TOKEN_ADDRESS ) {
+                // reset tokens for reserve
+                if( ! source.approve( reserve, 0) ) throw;
+                
+                // send tokens back to sender
+                if( ! source.transfer(msg.sender, amount) ) throw;
+            }
+            
+            return false;
+        }
+        
+        return true;
+    }
+    
+    function validateTradeInput( ERC20 source, uint srcAmount ) constant internal returns(bool) {
+        if( source != ETH_TOKEN_ADDRESS && msg.value > 0 ) {
+            // shouldn't send ether for token exchange
+            ErrorReport( tx.origin, 0x85000000, 0 );
+            return false;
+        }
+        else if( source == ETH_TOKEN_ADDRESS && msg.value != srcAmount ) {
+            // amount of sent ether is wrong
+            ErrorReport( tx.origin, 0x85000001, msg.value );
+            return false;
+        }
+        else if( source != ETH_TOKEN_ADDRESS ) {
+            if( source.allowance(msg.sender,this) < srcAmount ) {
+                // insufficient allowane
+                ErrorReport( tx.origin, 0x85000002, msg.value );
+                return false;
+            }
+        }
+        
+        return true;
+        
+    }
+    
+    event Trade( address indexed sender, ERC20 source, ERC20 dest, uint actualSrcAmount, uint actualDestAmount );
+    
+    struct ReserveInfo {
+        uint rate;
+        KyberReserve reserve;
+        uint reserveBalance;
+    }
+    
+    struct TradeInfo {
+        uint convertedDestAmount;
+        uint remainedSourceAmount;
+        
+        bool tradeFailed;
+    }
+    
+    function trade( ERC20 source, uint srcAmount,
+                    ERC20 dest, address destAddress, uint maxDestAmount,
+                    uint minConversionRate,
+                    bool throwOnFailure ) payable returns(bool) {
+
+        if( ! validateTradeInput( source, srcAmount ) ) {
+            // invalid input
+            ErrorReport( tx.origin, 0x86000000, 0 );
+            if( msg.value > 0 ) msg.sender.transfer(msg.value);
+            if( throwOnFailure ) throw;
+            return false;
+        }
+
+        TradeInfo memory tradeInfo = TradeInfo(0,srcAmount,false);
+        
+        while( (tradeInfo.convertedDestAmount + EPSILON < maxDestAmount) && (tradeInfo.remainedSourceAmount > EPSILON) ) {
+            ReserveInfo memory reserveInfo;
+            (reserveInfo.rate, reserveInfo.reserve, reserveInfo.reserveBalance) = findBestRate(source,dest);
+            if( reserveInfo.rate == 0 || reserveInfo.rate < minConversionRate ) {
+                tradeInfo.tradeFailed = true;
+                // no more available funds
+                ErrorReport( tx.origin, 0x86000001, tradeInfo.remainedSourceAmount );
+                break;
+            }
+            
+            uint actualSrcAmount = tradeInfo.remainedSourceAmount;
+            // TODO - overflow check
+            uint actualDestAmount = (actualSrcAmount * reserveInfo.rate) / PRECISION;
+            if( actualDestAmount < reserveInfo.reserveBalance ) {
+                actualDestAmount = reserveInfo.reserveBalance;
+            }
+            if( actualDestAmount + tradeInfo.convertedDestAmount < maxDestAmount ) {
+                actualDestAmount = maxDestAmount - tradeInfo.convertedDestAmount;
+            }
+            
+            // TODO - check overflow
+            actualSrcAmount = (actualDestAmount * PRECISION)/reserveInfo.rate;
+            
+            // do actual trade
+            if( ! doSingleTrade( source,actualSrcAmount, dest, destAddress, reserveInfo.reserve, true ) ) {
+                tradeInfo.tradeFailed = true;
+                // trade failed in reserve
+                ErrorReport( tx.origin, 0x86000002, tradeInfo.remainedSourceAmount );
+                break;
+            }
+            
+            // todo - check overflow
+            tradeInfo.remainedSourceAmount -= actualSrcAmount;
+            tradeInfo.convertedDestAmount += actualDestAmount;
+        }
+        
+        if( tradeInfo.tradeFailed ) {
+            if( throwOnFailure ) throw;
+            if( msg.value > 0 ) msg.sender.transfer(msg.value);
+            
+            return false;
+        }
+        else {
+            ErrorReport( tx.origin, 0, 0 );
+            if( tradeInfo.remainedSourceAmount > 0 && source == ETH_TOKEN_ADDRESS ) {
+                msg.sender.transfer(tradeInfo.remainedSourceAmount);
+            }
+            Trade( msg.sender, source, dest, srcAmount-tradeInfo.remainedSourceAmount, tradeInfo.convertedDestAmount );
+            return true;
+        }
+    }
+}
 
