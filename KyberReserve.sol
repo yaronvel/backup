@@ -483,7 +483,7 @@ contract KyberNetwork {
         }
         else {
             // will have truble if more than 50k reserves...
-            for( uint i = 0 ; i < reserve.length ; i++ ) {
+            for( uint i = 0 ; i < reserves.length ; i++ ) {
                 if( reserves[i] == reserve ) {
                     if( reserves.length == 0 ) return;
                     reserves[i] = reserves[--reserves.length];
@@ -495,4 +495,33 @@ contract KyberNetwork {
         
         ErrorReport( msg.sender, 0, 0 );
     }
+    
+    event ListPairsForReserve( address reserve, ERC20 source, ERC20 dest, bool add );
+    function listPairForReserve(address reserve, ERC20 source, ERC20 dest, bool add ) {
+        if( msg.sender != admin ) {
+            // only admin can add to reserve
+            ErrorReport( msg.sender, 0x88000000, 0 );
+            return;
+        }
+        
+        (perReserveListedPairs[reserve])[sha3(source,dest)] = add;
+        ListPairsForReserve( reserve, source, dest, add );
+        ErrorReport( tx.origin, 0, 0 );        
+    }
+    
+    function upgrade( address newAddress ) {
+        // TODO
+        throw;
+    }
+    
+    // should be called off chain
+    function getReserves( ) constant returns(address[]) {
+        address[] result;
+        for( uint i = 0 ; i < reserves.length ; i++ ) {
+            result.push(reserves[i]);
+        }
+        
+        return result;
+    }
 }
+
